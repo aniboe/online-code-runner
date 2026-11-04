@@ -10,9 +10,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
+    "axios": "^1.21.0",
+    "monaco-editor": "^0.57.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.5",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

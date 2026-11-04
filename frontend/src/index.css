@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+
+
+
+
+/* this below code is used to make xterm take all the ramaing space and not leave empty space */
+
+.terminal .xterm-viewport {
+  height: 100%;
+}
+
+.terminal.xterm {
+  height: 100% !important;
+  width: 100%;
+}
+
+/* up until here */
