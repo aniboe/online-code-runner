@@ -21,3 +21,5 @@ const ApiVerification = asyncHandler(
         next()
     }
 )
+
+export default ApiVerification

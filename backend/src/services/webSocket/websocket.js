@@ -1,10 +1,12 @@
 import { WebSocketServer } from 'ws'
 import crypto from 'crypto'
 import fs from 'fs'
-import { verifyToken } from '../../utils/Auth-JWT.js'
 import path from 'path'
-import redis from '../redis/redis.js'
+import Redis from 'ioredis'
 import { spawn } from 'child_process'
+import { verifyToken } from '../../utils/Auth-JWT.js'
+import redis from '../redis/redis.js'
+import { codeQueue } from '../bullmq/queue.js'
 
 const refMap = new Map()
 
@@ -12,12 +14,8 @@ export function initWS(server) {
     const webSocketInstance = new WebSocketServer({ server })
 
     webSocketInstance.on('connection', async (websocket, req) => {
-
-        // Authentication Check (Strictly Auth Only)
         const cookies = req.headers.cookie
-        // const token = cookies?.split(';').find(c => c.trim().startsWith('token='))?.split('=')[1] // Safer token extraction placeholder
-        const token = cookies?.split('=').slice(1).join("=") // Safer token extraction placeholder
-        
+        const token = cookies?.split('=').slice(1).join("=")
         
         if (!token) {
             websocket.send(JSON.stringify({ error: 'Unauthorized: Missing token' }))
@@ -40,7 +38,6 @@ export function initWS(server) {
         const userId = userData._id
         const serverProjectRootFolder = path.resolve('./PROJECT-SECSSIONS')
         let userFolderName = ''
-        let activeDockerProcess = null
 
         // Session & Directory Management
         try {
@@ -49,7 +46,6 @@ export function initWS(server) {
             if (existingFold && fs.existsSync(path.join(serverProjectRootFolder, existingFold))) {
                 userFolderName = existingFold
 
-                // Clear any pending cleanup timeout since user reconnected
                 const getExistingTimeout = refMap.get(userId)
                 if (getExistingTimeout) {
                     clearTimeout(getExistingTimeout)
@@ -59,9 +55,6 @@ export function initWS(server) {
                 userFolderName = crypto.randomUUID()
                 const newUserProjectPath = path.join(serverProjectRootFolder, userFolderName)
                 fs.mkdirSync(newUserProjectPath, { recursive: true })
-
-                // NOTE :writing in file shoud be done done using front end on  create file
-                // Create default main.js for first-time session
                 fs.writeFileSync(path.join(newUserProjectPath, 'main.js'), "console.log('Hello World '); // replace this and write ur code here")
 
                 await redis.hset(userId, 'foldername', userFolderName)
@@ -73,12 +66,23 @@ export function initWS(server) {
         }
 
         const userDir = path.join(serverProjectRootFolder, userFolderName)
+        const outputChannel = `sandbox:output:${userId}`
+        const inputChannel = `sandbox:input:${userId}`
 
-        // Notify frontend of successful session initialization
+        // Dedicated subscriber for streaming output back down to this client socket
+        const wsRedisSubscriber = new Redis({ host: 'localhost', port: 6379 })
+        await wsRedisSubscriber.subscribe(outputChannel)
+
+        wsRedisSubscriber.on('message', (channel, message) => {
+            if (channel === outputChannel) {
+                websocket.send(message)
+            }
+        })
+
         websocket.send(JSON.stringify({ type: 'session', folderName: userFolderName, isRegistered: true }))
 
-        // Message Handling (Docker Execution)
-        websocket.on('message', (message) => {
+        // Message Handling
+        websocket.on('message', async (message) => {
             let receivedMessage
             try {
                 receivedMessage = JSON.parse(message.toString())
@@ -92,29 +96,24 @@ export function initWS(server) {
                 return
             }
 
+            // 1. Stop Action
             if (receivedMessage.action === 'stop') {
-                activeDockerProcess?.kill()
-                activeDockerProcess = null
+                const containerName = `sandbox-${userId}`
+                spawn('docker', ['stop', containerName])
                 return
             }
 
+            // 2. Input (Stdin) Action
             if (receivedMessage.action === 'input') {
                 if (typeof receivedMessage.input !== 'string') {
                     websocket.send(JSON.stringify({ error: 'Input must be a string' }))
                     return
                 }
-
-                if (!activeDockerProcess || !activeDockerProcess.stdin.writable) {
-                    websocket.send(JSON.stringify({ error: 'No running process to receive input' }))
-                    return
-                }
-
-                activeDockerProcess.stdin.write(receivedMessage.input)
+                await redis.publish(inputChannel, receivedMessage.input)
                 return
             }
 
-
-            
+            // 3. Run Action
             if (receivedMessage.action !== 'run') return
 
             if (typeof receivedMessage.code !== 'string') {
@@ -122,82 +121,31 @@ export function initWS(server) {
                 return
             }
 
-
-
-
-
-
             try {
                 fs.writeFileSync(path.join(userDir, 'main.js'), receivedMessage.code)
 
-                if (activeDockerProcess) {
-                    activeDockerProcess.kill()
-                }
+                const containerName = `sandbox-${userId}`
+                spawn('docker', ['stop', containerName])
 
-                const dockerProcess = spawn( // goes into bullmq worker
-                    'docker',
-                    [
-                        'run',
-                        '--rm',
-                        '-i',
-                        '--name', `${userId}`,
-                        '--memory', '128m',
-                        '--cpus', '0.5',
-                        '--pids-limit', '50',
-                        '--network', 'none',
-                        '-v', `${userDir}:/app`,
-                        'dir-exe',
-                        'node',
-                        '/app/main.js'
-                    ],
-                    {
-                        stdio: ['pipe', 'pipe', 'pipe']
-                    }
-                )
+                await codeQueue.add('execute-code', {
+                    userId,
+                    userFolderName,
+                    code: receivedMessage.code
+                }, { removeOnComplete: true, removeOnFail: true })
 
-                activeDockerProcess = dockerProcess
-
-                dockerProcess.stdout.on('data', (data) => {
-                    websocket.send(JSON.stringify({ type: 'output', data: data.toString() }))
-                })
-
-                dockerProcess.stderr.on('data', (data) => {
-                    websocket.send(JSON.stringify({ type: 'error', data: data.toString() }))
-                })
-
-                dockerProcess.on('error', (error) => {
-                    console.error('Docker process error:', error)
-                    websocket.send(JSON.stringify({ type: 'error', data: 'Failed to start Docker process' }))
-                    if (activeDockerProcess === dockerProcess) {
-                        activeDockerProcess = null
-                    }
-                })
-
-                dockerProcess.on('close', () => {
-                    if (activeDockerProcess === dockerProcess) {
-                        activeDockerProcess = null
-                    }
-                })
             } catch (error) {
-                console.error('Failed to run code:', error)
-                websocket.send(JSON.stringify({ error: 'Failed to save code or start execution' }))
+                console.error('Failed to enqueue code run:', error)
+                websocket.send(JSON.stringify({ error: 'Failed to save code or start execution queue' }))
             }
         })
 
-
-
-
-
-
-
-
         // Connection Close & Delayed Cleanup
         websocket.on('close', () => {
-            if (activeDockerProcess) {
-                activeDockerProcess.kill()
-            }
+            wsRedisSubscriber.quit()
 
-            // Grace period timeout before wiping out files and Redis records
+            const containerName = `sandbox-${userId}`
+            spawn('docker', ['stop', containerName])
+
             const timeoutRef = setTimeout(async () => {
                 try {
                     fs.rmSync(userDir, { recursive: true, force: true })
