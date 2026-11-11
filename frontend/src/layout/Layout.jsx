@@ -1,13 +1,56 @@
-import Monaco from "../hero/guest/Monaco.jsx"
-import Xterm from "../hero/guest/Xterm.jsx"
+import { useRef, useState } from "react"
+import Monaco from "../hero/Monaco.jsx"
+import Xterm from "../hero/Xterm.jsx"
 import { webSocket } from "../main.jsx"
 
 function Layout() {
+    const [isRuning, setIsRuning] = useState(false)
+    const editorRef = useRef(null)
+    const terminalRef = useRef(null) // 1. Create a ref for the terminal
 
-    const handelRunCode = (e) => {
+
+
+    async function clearTerminal(){
+        if (terminalRef.current) {
+            terminalRef.current.clear() // 2. Call the exposed clear method
+        }
+    }
+
+    const handelRunCode = async (e) => {
         e.preventDefault()
-        webSocket.send('this is message')
+        setIsRuning(true)
+        if (!editorRef.current) {
+            console.error('Code editor is not ready')
+            return
+        }
+
+        if (webSocket.readyState !== WebSocket.OPEN) {
+            console.error('WebSocket is not connected')
+            return
+        }
+
+        webSocket.send(JSON.stringify({
+            action: 'run',
+            code: editorRef.current.getValue()
+        }))
+        await clearTerminal()
     } 
+
+    const handelStopExeution = async (e) => {
+        e.preventDefault()
+        webSocket.send(JSON.stringify({
+            action: 'stop'
+        }))
+        if (terminalRef.current && isRuning) {
+            await terminalRef.current.stoped() // 2. Call the exposed clear method
+        }
+        setIsRuning(false)
+    }
+
+    const handelTerminalClear = async (e) => {
+        e.preventDefault()
+        await clearTerminal()
+    }
 
   return (
     <div className="h-screen w-screen flex flex-col"> 
@@ -17,51 +60,35 @@ function Layout() {
 
         <main className="flex-1 min-h-0 flex flex-col">
             <div className=" h-8 shrink-0 flex items-center">
+                <section aria-label="controles" className="bg-amber-950 flex-1 flex items-center justify-center gap-1.5 h-full px-3">
 
-                {/* opened file */}
-                <section aria-label="file-selectot" className="bg-blue-600 flex-1 h-full flex items-center gap-2 px-3">
-                    <h1>file</h1>
-                    <h1>file</h1>
-                    <h1>file</h1>
-                    <h1>file</h1>
-                </section>
-
-                
-                {/* options like run clear terminal stop */}
-                <section aria-label="controles" className="bg-amber-950 flex-1 flex items-center gap-1.5 h-full px-3">
                     <button className="bg-green-400 px-2 rounded"
                         onClick={handelRunCode}
                     >start</button>
-                    <button className="bg-red-400 px-2 rounded"
-                        // onClick={}
+
+                    <button className={`bg-red-400 px-2 rounded gra ${!isRuning && "grayscale cursor-not-allowed" }`}
+                        disabled = {!isRuning}
+                        onClick={handelStopExeution}
                     >stop</button>
+
                     <button className="bg-purple-400 px-2 rounded"
-                        // onClick={}
+                        onClick={handelTerminalClear}
                     >clear</button>
+                    
                 </section>
             </div>
-
-
 
             <div className="flex flex-1 min-h-0 min-w-0">
-
-                {/* code editor */}
                 <section aria-label="editor" className="w-1/2 min-h-0 min-w-0 pt-1 bg-zinc-900">
-                    <Monaco/>
+                    <Monaco editorRef={editorRef}/>
                 </section>
 
-
-                {/* terminal */}
                 <section aria-label="terminal" className="w-1/2 min-h-0 min-w-0 overflow-hidden bg-blue-600 text-white">
-                    <Xterm/>
+                    <Xterm ref={terminalRef} webSocket={webSocket}/> {/* 3. Attach ref here */}
                 </section>
             </div>
-
-
         </main>
 
-
-        {/* some bs */}
         <footer className="bg-pink-600 text-sm font-light text-center">
             this contain i dk   
         </footer>
