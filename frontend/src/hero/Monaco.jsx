@@ -7,7 +7,18 @@ function Monaco({ editorRef }) {
       width='100%'
       theme="vs-dark"
       defaultLanguage="javascript"
-      defaultValue="// write ur conde here"
+      // defaultValue="console.log('helo')"
+      defaultValue="import readline from 'readline';
+
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
+
+rl.question('Enter your name: ', function(input) {
+    console.log('Your input is:', input);
+    rl.close();
+})"
       onMount={(editor) => {
         editorRef.current = editor
       }}

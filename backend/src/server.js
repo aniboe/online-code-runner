@@ -5,6 +5,7 @@ import { connectMongo } from './mongo/mongo.connect.js'
 import fs from 'fs'
 import path from 'path'
 import { initWS } from './services/webSocket/websocket.js'
+import './services/bullmq/worker.js'
 
 const PORT = process.env.PORT || 3000; // note: of no semicolon than it connects with iifi in next line
 

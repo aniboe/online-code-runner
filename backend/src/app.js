@@ -25,7 +25,7 @@ app.use(cors(corsOptions))
 app.use(express.json())
 app.use(cookieParser())
 app.use(express.urlencoded({extended: true}))
-app.use(express.static(path.join(process.cwd(), 'PROJECT-SESSIONS')))
+app.use(express.static("./public"))
 
 
 // ROUTES

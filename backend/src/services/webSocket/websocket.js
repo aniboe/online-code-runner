@@ -99,7 +99,22 @@ export function initWS(server) {
             // 1. Stop Action
             if (receivedMessage.action === 'stop') {
                 const containerName = `sandbox-${userId}`
-                spawn('docker', ['stop', containerName])
+                const dockerProcess = spawn('docker', ['kill', containerName])
+                dockerProcess.once('error', (error) => {
+                    console.error('Failed to stop execution:', error)
+                    if (websocket.readyState === 1) {
+                        websocket.send(JSON.stringify({ error: 'Failed to stop execution' }))
+                    }
+                })
+                dockerProcess.once('close', (exitCode) => {
+                    if (websocket.readyState !== 1) return
+
+                    websocket.send(JSON.stringify(
+                        exitCode === 0
+                            ? { type: 'stopped' }
+                            : { error: 'No running execution could be stopped' }
+                    ))
+                })
                 return
             }
 
@@ -115,7 +130,6 @@ export function initWS(server) {
 
             // 3. Run Action
             if (receivedMessage.action !== 'run') return
-
             if (typeof receivedMessage.code !== 'string') {
                 websocket.send(JSON.stringify({ error: 'Run action requires code as a string' }))
                 return
