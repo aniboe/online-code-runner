@@ -9,11 +9,13 @@ const app = express()
 
 
 
-// cors configuration
-const corsOptions = { 
-    origin: 'http://localhost:5173',
+// Changed: use the deployed frontend URL from the environment instead of a hard-coded origin.
+// The local fallback keeps the existing Vite development setup working.
+const corsOptions = {
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'], // dono what this does
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    // credentials is required for the browser to send/store the accessToken cookie.
     credentials: true
 }
 
@@ -34,7 +36,6 @@ app.use("/api/v1/auth", authRouter)
 
 
 export default app
-
 
 
 

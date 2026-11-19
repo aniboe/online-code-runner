@@ -6,8 +6,8 @@ const ApiVerification = asyncHandler(
     async(req, res, next) => {
         const token = req.cookies?.accessToken
 
-        if(token){
-            throw new ApiError(400, "invalid token or token not available")
+        if(!token){
+            throw new ApiError(401, "invalid token or token not available")
         }
         
         const isTokenValid = verifyToken(token)

@@ -7,7 +7,10 @@ import path from 'path'
 import { initWS } from './services/webSocket/websocket.js'
 import './services/bullmq/worker.js'
 
-const PORT = process.env.PORT || 3000; // note: of no semicolon than it connects with iifi in next line
+const PORT = process.env.PORT || 3000
+// Changed: expose the HTTP/WebSocket server on all interfaces when deployed.
+// Binding explicitly to 0.0.0.0 is harmless for local development too.
+const HOST = process.env.HOST || '0.0.0.0'
 
 
 const httpServer = http.createServer(app) // fumction to be passed not object
@@ -33,8 +36,9 @@ connectMongo()
 
     makeProjectDir() // create project directory if not exists
 
-    httpServer.listen(PORT ,() => {
-        console.log(`server is runing on http://localhost:${PORT}`)
+    // Changed: the server now listens on HOST as well as PORT for container/host deployment.
+    httpServer.listen(PORT, HOST, () => {
+        console.log(`server is running at http://${HOST}:${PORT}`)
     })
 })
 .catch ((err) => {

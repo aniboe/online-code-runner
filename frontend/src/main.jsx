@@ -11,6 +11,18 @@ export const api = axios.create({
 })
 
 export const webSocket = new WebSocket(import.meta.env.VITE_WS_BACKEND_URI)
+export let sessionFolderName = null
+
+webSocket.addEventListener('message', (event) => {
+  try {
+    const message = JSON.parse(event.data)
+    if (message.type === 'session' && message.folderName) {
+      sessionFolderName = message.folderName
+    }
+  } catch {
+    // Other listeners handle message processing and reporting.
+  }
+})
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

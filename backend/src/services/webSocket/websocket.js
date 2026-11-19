@@ -14,7 +14,9 @@ export function initWS(server) {
     const webSocketInstance = new WebSocketServer({ server })
 
     webSocketInstance.on('connection', async (websocket, req) => {
-        const cookies = req.headers.cookie
+        // Changed: parse only the accessToken cookie instead of assuming it is the first cookie.
+        // This makes WebSocket authentication work even when other cookies are present.
+        const cookies = req.headers.cookie || ''
         const token = cookies?.split('=').slice(1).join("=")
         
         if (!token) {
