@@ -1,4 +1,4 @@
-# Run Online Code Runner locally
+# Run "Online Code Runner" locally
 
 This guide walks through getting the project from GitHub to a working local
 development setup on Windows. The backend uses MongoDB, Redis, Google OAuth,
